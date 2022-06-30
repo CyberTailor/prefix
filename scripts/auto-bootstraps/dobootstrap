@@ -5,7 +5,7 @@ BOOTURL="http://rsync.prefix.bitzolder.nl/scripts/bootstrap-prefix.sh"
 UPLOAD="rsync1.prefix.bitzolder.nl::gentoo-portage-bootstraps"
 
 do_fetch() {
-	local FETCHCOMMAND
+	local FETCH_COMMAND
 	# Try to find a download manager, we only deal with wget,
 	# curl, FreeBSD's fetch and ftp.
 	if [[ x$(type -t wget) == "xfile" ]] ; then
@@ -36,7 +36,8 @@ do_prepare() {
 		do_fetch ${BOOTURL} > ${bootstrap}
 	fi
 
-	local chost=$(${BASH} ${bootstrap} chost.guess x)
+	local chost
+	chost=$(${BASH} ${bootstrap} chost.guess x)
 	case ${chost} in
 		*86-*)
 			if [[ ${bitw} == 64 ]] ; then
@@ -92,10 +93,11 @@ do_prepare() {
 	EPREFIX=${PWD}/bootstrap${bitw}-${dte}
 	[[ -n ${OVERRIDE_EPREFIX} ]] && EPREFIX=${OVERRIDE_EPREFIX}
 
-	local bootstrapscript=$(realpath ${BASH_SOURCE[0]} 2>/dev/null)
+	local bootstrapscript
+	bootstrapscript=$(realpath ${BASH_SOURCE[0]} 2>/dev/null)
 	if [[ -z ${bootstrapscript} ]] ; then
 		local b=${BASH_SOURCE[0]}
-		cd "${b%/*}"
+		cd "${b%/*}" || return 1
 		bootstrapscript=$(pwd -P)/${b##*/}
 	fi
 	echo "EPREFIX=${EPREFIX}"
@@ -138,8 +140,9 @@ do_prepare() {
 			#                   x86_64-pc-linux-ubuntu16
 			# I choose the latter because it is compatible with most
 			# UNIX vendors
-			local dist=$(lsb_release -si)
-			local rel=$(lsb_release -sr)
+			local dist rel
+			dist=$(lsb_release -si)
+			rel=$(lsb_release -sr)
 			if [[ -z ${dist} ]] || [[ -z ${rel} ]] ; then
 				source /etc/os-release  # this may fail if the file isn't there
 				[[ -z ${dist} ]] && dist=${NAME}
