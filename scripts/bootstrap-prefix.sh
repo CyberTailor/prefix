@@ -2,7 +2,7 @@
 # Copyright 2006-2022 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
-trap 'exit 1' TERM KILL INT QUIT ABRT
+trap 'exit 1' TERM INT QUIT ABRT
 
 # RAP (libc) mode is triggered on Linux kernel and glibc.
 is-rap() { [[ ${PREFIX_DISABLE_RAP} != "yes" && ${CHOST} = *linux-gnu* ]]; }
@@ -1675,7 +1675,7 @@ bootstrap_stage1() {
 }
 
 bootstrap_stage1_log() {
-	bootstrap_stage1 ${@} 2>&1 | tee -a ${ROOT}/stage1.log
+	bootstrap_stage1 "${@}" 2>&1 | tee -a ${ROOT}/stage1.log
 	local ret=${PIPESTATUS[0]}
 	[[ ${ret} == 0 ]] && touch ${ROOT}/.stage1-finished
 	return ${ret}
@@ -1965,7 +1965,7 @@ bootstrap_stage2() {
 }
 
 bootstrap_stage2_log() {
-	bootstrap_stage2 ${@} 2>&1 | tee -a ${ROOT}/stage2.log
+	bootstrap_stage2 "${@}" 2>&1 | tee -a ${ROOT}/stage2.log
 	local ret=${PIPESTATUS[0]}
 	[[ ${ret} == 0 ]] && touch "${ROOT}/.stage2-finished"
 	return ${ret}
@@ -2279,7 +2279,7 @@ bootstrap_stage3() {
 }
 
 bootstrap_stage3_log() {
-	bootstrap_stage3 ${@} 2>&1 | tee -a ${ROOT}/stage3.log
+	bootstrap_stage3 "${@}" 2>&1 | tee -a ${ROOT}/stage3.log
 	local ret=${PIPESTATUS[0]}
 	[[ ${ret} == 0 ]] && touch "${ROOT}/.stage3-finished"
 	return ${ret}
@@ -2992,7 +2992,7 @@ EOF
 			exit 1
 		fi
 	fi
-	
+
 	# because we unset ROOT from environment above, and we didn't set
 	# ROOT as argument in the script, we set ROOT here to the EPREFIX we
 	# just harvested
@@ -3185,7 +3185,8 @@ if [[ -z ${CHOST} ]]; then
 		case `uname -s` in
 			Linux)
 				plt="gnu"
-				[[ -e /lib/ld-musl-*.so.1 ]] && plt="musl"
+				musl_test=( /lib/ld-musl-*.so.1 )
+				[[ -e ${musl_test[0]} ]] && plt="musl"
 				sfx="unknown-linux-${plt}"
 				case `uname -m` in
 					ppc*)
