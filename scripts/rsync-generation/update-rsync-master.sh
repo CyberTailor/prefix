@@ -3,7 +3,7 @@
 SCRIPTSTARTTIME=$(date +%s)
 
 # get keys for ssh and signing
-eval $(env SHELL=/bin/bash keychain -q --noask --eval)
+eval "$(env SHELL=/bin/bash keychain -q --noask --eval)"
 
 BASE_PATH="$(readlink -f "${BASH_SOURCE[0]%/*}")"
 
@@ -20,7 +20,7 @@ PORTAGE_BASE_PATH="${BASE_PATH}/prefix/usr/lib/portage/"
 PYTHONPATH="${PORTAGE_BASE_PATH}/pym"
 PORTAGE_CONFIGROOT="${BASE_PATH}/misc/config_root"
 PORTAGE_DEPCACHEDIR="${BASE_PATH}/depcache"
-MANIFEST_CACHE="${BASE_PATH}/manifests"
+export MANIFEST_CACHE="${BASE_PATH}/manifests"
 
 # for .cvsps and gnupg cache mainly
 HOME="${BASE_PATH}/misc"
@@ -72,11 +72,11 @@ apply_git_mtimes() {
 				;;
 			[ACMT]*)
 				set -- ${line}
-				files+=( $2 )
+				files+=( "${2}" )
 				;;
 			[R]*)
 				set -- ${line}
-				files+=( $3 )
+				files+=( "${3}" )
 				;;
 			[D]*)
 				set -- ${line}
@@ -89,8 +89,8 @@ apply_git_mtimes() {
 					# if the entire package was removed, touch the
 					# category level metadata
 					[[ -f ${f%/*}/metadata.xml ]] \
-						&& files+=( ${f%/*}/metadata.xml ) \
-						|| files+=( ${f%/*/*}/metadata.xml )
+						&& files+=( "${f%/*}"/metadata.xml ) \
+						|| files+=( "${f%/*/*}"/metadata.xml )
 				fi
 				;;
 		esac
@@ -229,7 +229,7 @@ START=$(date +%s)
 # generate the metadata
 echo "($(date +"%F %R")) generating metadata"
 dolog() {
-	echo $*
+	echo "${@}"
 	"$@"
 }
 dolog "${PORTAGE_BASE_PATH}/bin/egencache" --update --rsync \

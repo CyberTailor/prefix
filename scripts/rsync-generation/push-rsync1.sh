@@ -15,7 +15,7 @@ LOCALDIR="/path/to/master-rsync-tree"
 #		exit 1
 #	;;
 #esac
-echo "($(date +"%F %R")) will refresh and activate snapshot: ${target}"
+echo "($(date +"%F %R")) will refresh and activate snapshot"
 
 # synchronise the target
 rsync -va --delete "${LOCALDIR}"/ ${TRGDIR}/ > /var/tmp/rsync-updates.log || exit 1

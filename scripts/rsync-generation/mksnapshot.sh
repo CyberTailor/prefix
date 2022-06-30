@@ -4,7 +4,7 @@ SCRIPTLOC="$(readlink -f "${BASH_SOURCE[0]%/*}")"
 # for gpg's keys
 export HOME="${SCRIPTLOC}/misc"
 
-cd /export/scratch/home/gentoo/snapshots
+cd /export/scratch/home/gentoo/snapshots || exit 1
 
 TODAY=$(date +%s)
 YESTERDAY=$((TODAY - 86400))
@@ -20,16 +20,16 @@ rm -Rf ${TMPDIR}
 mkdir -p ${TMPDIR}
 
 # quickly take a snapshot, such that we get a consistent image
-pushd ${RSYNCTREE} > /dev/null
+pushd ${RSYNCTREE} > /dev/null || exit 1
 tar -cf ${SNAME} *
-popd > /dev/null
+popd > /dev/null || exit 1
 
 # now revamp it such that it's in a directory "portage"
-pushd ${TMPDIR} > /dev/null
+pushd ${TMPDIR} > /dev/null || exit 1
 mkdir portage
 tar -xf ${SNAME} -C portage/
 tar -cf ${SNAME} portage/
-popd > /dev/null
+popd > /dev/null || exit 1
 
 rm -Rf ${TMPDIR}
 
