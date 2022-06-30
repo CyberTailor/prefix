@@ -18,7 +18,7 @@ estatus() {
 	printf '\033]2;'"$*"'\007'
 }
 
-eerror() { estatus $*; echo "!!! $*" 1>&2; }
+eerror() { estatus "${*}"; echo "!!! $*" 1>&2; }
 einfo() { echo "* $*"; }
 v() { echo "$@"; "$@"; }
 
@@ -45,11 +45,11 @@ emake() {
 
 efetch() {
 	if [[ ! -e ${DISTDIR}/${1##*/} ]] ; then
-	  	if [[ ${OFFLINE_MODE} ]]; then
-		  echo "I need ${1##*/} from $1 in $DISTDIR, can you give it to me?"
-		  read
-		  [[ -e ${DISTDIR}/${1##*/} ]] && return 0
-		  # Give fetch a try
+		if [[ ${OFFLINE_MODE} ]]; then
+			echo "I need ${1##*/} from $1 in $DISTDIR, can you give it to me?"
+			read
+			[[ -e ${DISTDIR}/${1##*/} ]] && return 0
+			# Give fetch a try
 		fi
 
 		if [[ -z ${FETCH_COMMAND} ]] ; then
@@ -78,7 +78,7 @@ efetch() {
 		mkdir -p "${DISTDIR}" >& /dev/null
 		einfo "Fetching ${1##*/}"
 		estatus "stage1: fetching ${1##*/}"
-		pushd "${DISTDIR}" > /dev/null
+		pushd "${DISTDIR}" > /dev/null || return 1
 
 		# Try for mirrors first, fall back to distfiles, then try given location
 		local locs=( )
@@ -99,7 +99,7 @@ efetch() {
 			eerror "downloading ${1} failed!"
 			return 1
 		fi
-		popd > /dev/null
+		popd > /dev/null || return 1
 	fi
 	return 0
 }
@@ -171,7 +171,7 @@ configure_toolchain() {
 	  # >gcc-4.7, as anything newer provides c++ anyway (#619542).
 	  # gcc-4.7 is the last version not to require a c++ compiler to
 	  # build
-	  eval $( (gcc -E - | grep compiler_stage1) <<-EOP
+	  eval "$( (gcc -E - | grep compiler_stage1) <<-EOP
 		#if defined(__GNUC__) && (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ > 7))
 		  compiler_stage1+=" sys-devel/gcc"
 		#elif defined(__GNUC__) && __GNUC__ >= 4
@@ -180,7 +180,7 @@ configure_toolchain() {
 		  compiler_stage1+=" <sys-devel/gcc-4.7"
 		#endif
 		EOP
-	  )
+	  )"
 	esac
 
 	CC=gcc
@@ -190,8 +190,9 @@ configure_toolchain() {
 		*darwin*:1)
 			einfo "Triggering Darwin with GCC toolchain"
 			compiler_stage1+=" sys-apps/darwin-miscutils"
-			local ccvers="$(unset CHOST; /usr/bin/gcc --version 2>/dev/null)"
-			local isgcc=
+			local ccvers
+			local isgcc=""
+			ccvers="$(unset CHOST; /usr/bin/gcc --version 2>/dev/null)"
 			case "${ccvers}" in
 				*"(GCC) 4.2.1 "*)
 					linker="=sys-devel/binutils-apple-3.2.6"
@@ -234,8 +235,9 @@ configure_toolchain() {
 			# https://bugs.gentoo.org/show_bug.cgi?id=538366
 			compiler_stage1="sys-apps/darwin-miscutils"
 			compiler_type="clang"
-			local ccvers="$(unset CHOST; /usr/bin/gcc --version 2>/dev/null)"
+			local ccvers
 			local llvm_deps="dev-util/ninja"
+			ccvers="$(unset CHOST; /usr/bin/gcc --version 2>/dev/null)"
 			case "${ccvers}" in
 				*"Apple clang version "*|*"Apple LLVM version "*)
 					# this is Clang, recent enough to compile recent clang
@@ -274,7 +276,8 @@ configure_toolchain() {
 			# TODO: target clang toolchain someday?
 			;;
 		*-solaris*)
-			local ccvers="$(unset CHOST; gcc --version 2>/dev/null)"
+			local ccvers
+			ccvers="$(unset CHOST; gcc --version 2>/dev/null)"
 			case "${ccvers}" in
 				*"gcc (GCC) 3.4.3"*)
 					# host compiler doesn't cope with the asm introduced
@@ -283,10 +286,14 @@ configure_toolchain() {
 					compiler_stage1=${compiler_stage1/" dev-libs/mpfr "/" <dev-libs/mpfr-4 "}
 					;;
 			esac
-			local nmout=$(nm -B 2>&1)
+			local nmout
+			nmout=$(nm -B 2>&1)
 			case "${nmout}" in
-				*/dev/null*)  :                            ;;  # apparently GNU
-				*)            export NM="$(type -P nm) -p" ;;  # Solaris nm
+				*/dev/null*)
+					;;  # apparently GNU
+				*)
+					NM="$(type -P nm) -p" # Solaris nm
+					export NM ;;
 			esac
 			;;
 		*-linux*)
@@ -358,26 +365,27 @@ bootstrap_setup() {
 
 	if is-rap ; then
 		if [[ ! -f ${ROOT}/etc/passwd ]]; then
-			if grep -q $(id -un) /etc/passwd; then
+			if grep -q "$(id -un)" /etc/passwd; then
 				ln -sf {,"${ROOT}"}/etc/passwd
 			else
 				getent passwd > "${ROOT}"/etc/passwd
 				# add user if it's not in /etc/passwd, bug #766417
-				getent passwd $(id -un) >> "${ROOT}"/etc/passwd
+				getent passwd "$(id -un)" >> "${ROOT}"/etc/passwd
 			fi
 		fi
 		if [[ ! -f ${ROOT}/etc/group ]]; then
-			if grep -q $(id -gn) /etc/group; then
+			if grep -q "$(id -gn)" /etc/group; then
 				ln -sf {,"${ROOT}"}/etc/group
 			else
 				getent group > "${ROOT}"/etc/group
 				# add group if it's not in /etc/group, bug #766417
-				getent group $(id -gn) >> "${ROOT}"/etc/group
+				getent group "$(id -gn)" >> "${ROOT}"/etc/group
 			fi
 		fi
 		[[ -f ${ROOT}/etc/resolv.conf ]] || ln -s {,"${ROOT}"}/etc/resolv.conf
 		[[ -f ${ROOT}/etc/hosts ]] || cp {,"${ROOT}"}/etc/hosts
-		local profile_linux=default/linux/ARCH/17.0/prefix/$(profile-kernel)
+		local profile_linux
+		profile_linux=default/linux/ARCH/17.0/prefix/$(profile-kernel)
 	else
 		local profile_linux=prefix/linux/ARCH
 	fi
@@ -477,7 +485,8 @@ bootstrap_setup() {
 		# setup MacOSX.sdk symlink for GCC, this should probably be
 		# managed using an eselect module in the future
 		rm -f "${ROOT}"/MacOSX.sdk
-		local SDKPATH=$(xcrun --show-sdk-path --sdk macosx)
+		local SDKPATH
+		SDKPATH=$(xcrun --show-sdk-path --sdk macosx)
 		if [[ ! -e ${SDKPATH} ]] ; then
 			SDKPATH=$(xcodebuild -showsdks | sort -nr \
 				| grep -o "macosx.*" | head -n1)
@@ -602,7 +611,7 @@ do_tree() {
 		# respect the source to get the latest
 		if [[ -n ${LATEST_TREE_YES} ]] ; then
 			echo "$1"
-			( export GENTOO_MIRRORS= DISTFILES_G_O= DISTFILES_PFX= ;
+			( export GENTOO_MIRRORS="" DISTFILES_G_O="" DISTFILES_PFX="" ;
 			  efetch "$1/$2" ) || return 1
 		else
 			efetch "$1/$2" || return 1
@@ -659,7 +668,8 @@ bootstrap_startscript() {
 
 	# see if PATH is kept/respected
 	local minPATH="preamble:${BASH%/*}:postlude"
-	local theirPATH="$(echo 'echo "${PATH}"' | env LS_COLORS= PATH="${minPATH}" $SHELL -l 2>/dev/null | grep "preamble:.*:postlude")"
+	local theirPATH
+	theirPATH="$(echo 'echo "${PATH}"' | env LS_COLORS= PATH="${minPATH}" $SHELL -l 2>/dev/null | grep "preamble:.*:postlude")"
 	if [[ ${theirPATH} != *"preamble:"*":postlude"* ]] ; then
 		einfo "WARNING: your shell initialisation (.cshrc, .bashrc, .profile)"
 		einfo "         seems to overwrite your PATH, this effectively kills"
@@ -698,11 +708,11 @@ bootstrap_portage() {
 	ptmp=${S}
 	rm -rf "${S}" >& /dev/null
 	mkdir -p "${S}" >& /dev/null
-	cd "${S}"
+	cd "${S}" || return 1
 	bzip2 -dc "${DISTDIR}/${A}" | tar -xf -
 	[[ ${PIPESTATUS[*]} == '0 0' ]] || return 1
 	S="${S}/prefix-portage-${PV}"
-	cd "${S}"
+	cd "${S}" || return 1
 
 	fix_config_sub
 
@@ -737,7 +747,7 @@ bootstrap_portage() {
 	einfo "Installing ${A%.tar.*}"
 	emake install || return 1
 
-	cd "${ROOT}"
+	cd "${ROOT}" || return 1
 	rm -Rf ${ptmp} >& /dev/null
 
 	# Some people will skip the tree() step and hence var/log is not created
@@ -789,7 +799,7 @@ bootstrap_simple() {
 	S="${PORTAGE_TMPDIR}/${PN}-${PV}"
 	rm -rf "${S}"
 	mkdir -p "${S}"
-	cd "${S}"
+	cd "${S}" || return 1
 	case $3 in
 		xz)    decomp=xz    ;;
 		bz2)   decomp=bzip2 ;;
@@ -798,7 +808,7 @@ bootstrap_simple() {
 	${decomp} -dc "${DISTDIR}"/${A} | tar -xf -
 	[[ ${PIPESTATUS[*]} == '0 0' ]] || return 1
 	S="${S}"/${PN}-${PV}
-	cd "${S}"
+	cd "${S}" || return 1
 
 	fix_config_sub
 
@@ -817,7 +827,7 @@ bootstrap_simple() {
 	einfo "Installing ${A%.tar.*}"
 	emake PREFIX="${ROOT}"/tmp/usr install || return 1
 
-	cd "${ROOT}"
+	cd "${ROOT}" || return 1
 	rm -Rf "${S}"
 	einfo "${A%.tar.*} successfully bootstrapped"
 }
@@ -850,7 +860,7 @@ bootstrap_gnu() {
 		S="${PORTAGE_TMPDIR}/${PN}-${PV}"
 		rm -rf "${S}"
 		mkdir -p "${S}"
-		cd "${S}"
+		cd "${S}" || return 1
 		case ${t} in
 			tar.xz)  decomp=xz    ;;
 			tar.bz2) decomp=bzip2 ;;
@@ -1028,7 +1038,7 @@ bootstrap_gnu() {
 		emake install || return 1
 	fi
 
-	cd "${ROOT}"
+	cd "${ROOT}" || return 1
 	rm -Rf "${S}"
 	einfo "${A%.tar.*} successfully bootstrapped"
 }
@@ -1048,7 +1058,7 @@ bootstrap_python() {
 	export S="${PORTAGE_TMPDIR}/python-${PV}"
 	rm -rf "${S}"
 	mkdir -p "${S}"
-	cd "${S}"
+	cd "${S}" || return 1
 	case ${A} in
 		*bz2) bzip2 -dc "${DISTDIR}"/${A} | tar -xf - ;;
 		*xz)  xz -dc "${DISTDIR}"/${A} | tar -xf -    ;;
@@ -1056,7 +1066,7 @@ bootstrap_python() {
 	esac
 	[[ ${PIPESTATUS[*]} == '0 0' ]] || return 1
 	S="${S}"/Python-${PV}
-	cd "${S}"
+	cd "${S}" || return 1
 	rm -rf Modules/_ctypes/libffi* || return 1
 	rm -rf Modules/zlib || return 1
 
@@ -1198,7 +1208,7 @@ bootstrap_python() {
 	# configure to not find them using HAS_HG
 	# - Do not find libffi via pkg-config using PKG_CONFIG
 	HAS_HG=no \
-	PKG_CONFIG= \
+	PKG_CONFIG="" \
 	econf \
 		--with-system-ffi \
 		--without-ensurepip \
@@ -1210,9 +1220,9 @@ bootstrap_python() {
 
 	einfo "Installing ${A%.tar.*}"
 	emake -k install || echo "??? Python failed to install *sigh* continuing anyway"
-	cd "${ROOT}"/tmp/usr/bin
+	cd "${ROOT}"/tmp/usr/bin || return 1
 	ln -sf python${PV%.*} python
-	cd "${ROOT}"/tmp/usr/lib
+	cd "${ROOT}"/tmp/usr/lib || return 1
 	# messes up python emerges, and shouldn't be necessary for anything
 	# http://forums.gentoo.org/viewtopic-p-6890526.html
 	rm -f libpython${PV%.*}.a
@@ -1233,11 +1243,11 @@ bootstrap_cmake_core() {
 	export S="${PORTAGE_TMPDIR}/cmake-${PV}"
 	rm -rf "${S}"
 	mkdir -p "${S}"
-	cd "${S}"
+	cd "${S}" || return 1
 	gzip -dc "${DISTDIR}"/${A} | tar -xf -
 	[[ ${PIPESTATUS[*]} == '0 0' ]] || return 1
 	S="${S}"/cmake-${PV}
-	cd "${S}"
+	cd "${S}" || return 1
 
 	# don't set a POSIX standard, system headers don't like that, #757426
 	sed -i -e 's/^#if !defined(_WIN32) && !defined(__sun)/& \&\& !defined(__APPLE__)/' \
@@ -1285,7 +1295,7 @@ bootstrap_zlib_core() {
 	export S="${PORTAGE_TMPDIR}/zlib-${PV}"
 	rm -rf "${S}"
 	mkdir -p "${S}"
-	cd "${S}"
+	cd "${S}" || return 1
 	case ${A} in
 		*.tar.gz) decomp=gzip  ;;
 		*)        decomp=bzip2 ;;
@@ -1293,7 +1303,7 @@ bootstrap_zlib_core() {
 	${decomp} -dc "${DISTDIR}"/${A} | tar -xf -
 	[[ ${PIPESTATUS[*]} == '0 0' ]] || return 1
 	S="${S}"/zlib-${PV}
-	cd "${S}"
+	cd "${S}" || return 1
 
 	if [[ ${CHOST} == x86_64-*-* || ${CHOST} == sparcv9-*-* ]] ; then
 		# 64-bits targets need zlib as library (not just to unpack),
@@ -1308,7 +1318,8 @@ bootstrap_zlib_core() {
 		# compiler to 32-bits code generation if requested here
 		export CC="${CC} -m32"
 	fi
-	local makeopts=( ${MAKEOPTS} )
+	local makeopts
+	readarray makeopts <<< "${MAKEOPTS}"
 	# 1.2.5 suffers from a concurrency problem
 	[[ ${PV} == 1.2.5 ]] && makeopts=()
 
@@ -1331,7 +1342,7 @@ bootstrap_zlib_core() {
 	fi
 
 	einfo "Compiling ${A%.tar.*}"
-	CHOST= ${CONFIG_SHELL} ./configure --prefix="${ROOT}"/tmp/usr || return 1
+	CHOST="" ${CONFIG_SHELL} ./configure --prefix="${ROOT}"/tmp/usr || return 1
 	MAKEOPTS=
 	emake "${makeopts[@]}" || return 1
 
@@ -1542,8 +1553,8 @@ bootstrap_stage1() {
 		|| [[ $(m4 --version 2>&1) == *GNU*1.4.1?* ]] \
 		|| (bootstrap_m4) || return 1
 	[[ -x ${ROOT}/tmp/usr/bin/bison ]] \
-		|| [[ $(bison --version 2>&1) == *GNU" "Bison") "2.[3-7]* ]] \
-		|| [[ $(bison --version 2>&1) == *GNU" "Bison") "[3-9]* ]] \
+		|| [[ $(bison --version 2>&1) == *"GNU Bison) "2.[3-7]* ]] \
+		|| [[ $(bison --version 2>&1) == *"GNU Bison) "[3-9]* ]] \
 		|| (bootstrap_bison) || return 1
 	if [[ ! -x ${ROOT}/tmp/usr/bin/uniq ]]; then
 		# If the system has a uniq, let's use it to test whether
@@ -1675,7 +1686,7 @@ bootstrap_stage1() {
 }
 
 bootstrap_stage1_log() {
-	bootstrap_stage1 "${@}" 2>&1 | tee -a ${ROOT}/stage1.log
+	bootstrap_stage1 2>&1 | tee -a ${ROOT}/stage1.log
 	local ret=${PIPESTATUS[0]}
 	[[ ${ret} == 0 ]] && touch ${ROOT}/.stage1-finished
 	return ${ret}
@@ -1701,13 +1712,13 @@ do_emerge_pkgs() {
 				evdb=${pvdb##*/}
 				if [[ ${pkg} == "="* ]] ; then
 					# exact match required (* should work here)
-					[[ ${evdb} == ${vdb##*/} ]] && break
+					[[ ${evdb} == "${vdb##*/}" ]] && break
 				else
 					vdb=${vdb%-*}
 					evdb=${evdb%-r*}
 					evdb=${evdb%_p*}
 					evdb=${evdb%-*}
-					[[ ${evdb} == ${vdb#*/} ]] && break
+					[[ ${evdb} == "${vdb#*/}" ]] && break
 				fi
 			fi
 			pvdb=
@@ -1746,15 +1757,15 @@ do_emerge_pkgs() {
 			echo "USE=\"\${USE} ${myuse[*]}\" # by bootstrap-prefix.sh" \
 				>> "${override_make_conf_dir}/0101_bootstrap_prefix_stack.conf"
 		fi
-		myuse=" ${myuse[*]} "
-		local use
+		local myuse_copy use
+		myuse_copy=" ${myuse[*]} "
 		for use in ${USE} ; do
-			myuse=" ${myuse/ ${use} /} "
-			myuse=" ${myuse/ -${use} /} "
-			myuse=" ${myuse/ ${use#-} /} "
-			myuse+=" ${use} "
+			myuse_copy=" ${myuse/ ${use} /} "
+			myuse_copy=" ${myuse/ -${use} /} "
+			myuse_copy=" ${myuse/ ${use#-} /} "
+			myuse_copy+=" ${use} "
 		done
-		myuse=( ${myuse} )
+		readarray myuse <<< "${myuse_copy}"
 
 		# Disable the STALE warning because the snapshot frequently gets stale.
 		#
@@ -1815,7 +1826,8 @@ bootstrap_stage2() {
 	# bison's configure checks for perl, but doesn't use it,
 	# except for tests.  Since we don't want to pull in perl at this
 	# stage, fake it
-	export PERL=$(which touch)
+	PERL=$(which touch)
+	export PERL
 	# GCC sometimes decides that it needs to run makeinfo to update some
 	# info pages from .texi files.  Obviously we don't care at this
 	# stage and rather have it continue instead of abort the build
@@ -1872,7 +1884,7 @@ bootstrap_stage2() {
 		sys-devel/gnuconfig
 		sys-apps/gentoo-functions
 		app-portage/elt-patches
-		$([[ ${CHOST} == *-cygwin* ]] && echo dev-libs/libiconv ) # bash dependency
+		"$([[ ${CHOST} == *-cygwin* ]] && echo dev-libs/libiconv )" # bash dependency
 		sys-libs/ncurses
 		sys-libs/readline
 		app-shells/bash
@@ -1900,7 +1912,7 @@ bootstrap_stage2() {
 	# provide active SDK link on Darwin
 	if [[ ${CHOST} == *-darwin* ]] ; then
 		rm -f "${ROOT}"/tmp/MacOSX.sdk
-		( cd "${ROOT}"/tmp && ln -s ../MacOSX.sdk )
+		( cd "${ROOT}"/tmp && ln -s {../,}MacOSX.sdk )
 	fi
 
 	# cmake has some external dependencies which require autoconf, etc.
@@ -2001,7 +2013,8 @@ bootstrap_stage3() {
 	done
 
 	get_libdir() {
-		local l=$(portageq envvar LIBDIR_$(portageq envvar ABI) 2>/dev/null)
+		local l
+		l=$(portageq envvar LIBDIR_"$(portageq envvar ABI)" 2>/dev/null)
 		[[ -z ${l} ]] && l=lib
 		echo ${l}
 	}
@@ -2009,7 +2022,8 @@ bootstrap_stage3() {
 	export CONFIG_SHELL="${ROOT}"/tmp/bin/bash
 	[[ ${compiler_type} == gcc ]] && \
 		export CPPFLAGS="-isystem ${ROOT}/usr/include"
-	export LDFLAGS="-L${ROOT}/usr/$(get_libdir)"
+	LDFLAGS="-L${ROOT}/usr/$(get_libdir)"
+	export LDFLAGS
 	[[ ${CHOST} == *-darwin* ]] || \
 		LDFLAGS+=" -Wl,-rpath=${ROOT}/usr/$(get_libdir)"
 	unset CC CXX
@@ -2099,7 +2113,7 @@ bootstrap_stage3() {
 		# Tell dynamic loader the path of libgcc_s.so of stage2
 		if [[ ! -f "${ROOT}"/etc/ld.so.conf.d/stage2.conf ]]; then
 			mkdir -p "${ROOT}"/etc/ld.so.conf.d
-			dirname $(gcc -print-libgcc-file-name) \
+			dirname "$(gcc -print-libgcc-file-name)" \
 				> "${ROOT}"/etc/ld.so.conf.d/stage2.conf
 		fi
 
@@ -2121,11 +2135,12 @@ bootstrap_stage3() {
 		pkgs=(
 			sys-devel/binutils-config
 			sys-libs/zlib
-			${linker}
+			"${linker}"
 		)
 		# use the new dynamic linker in place of rpath from now on.
-		RAP_DLINKER=$(echo "${ROOT}"/$(get_libdir)/ld*.so.[0-9])
-		export LDFLAGS="-L${ROOT}/usr/$(get_libdir) -Wl,--dynamic-linker=${RAP_DLINKER}"
+		RAP_DLINKER=$(echo "${ROOT}/$(get_libdir)"/ld*.so.[0-9])
+		LDFLAGS="-L${ROOT}/usr/$(get_libdir) -Wl,--dynamic-linker=${RAP_DLINKER}"
+		export LDFLAGS
 		BOOTSTRAP_RAP=yes \
 		pre_emerge_pkgs --nodeps "${pkgs[@]}" || return 1
 
@@ -2149,7 +2164,7 @@ bootstrap_stage3() {
 			sys-devel/flex
 			sys-devel/binutils-config
 			sys-libs/zlib
-			${linker}
+			"${linker}"
 		)
 
 		pre_emerge_pkgs --nodeps "${pkgs[@]}" || return 1
@@ -2215,7 +2230,7 @@ bootstrap_stage3() {
 		sys-devel/make
 		sys-apps/file
 		app-admin/eselect
-		$( [[ ${CHOST} == *-cygwin* ]] && echo sys-libs/cygwin-crypt )
+		"$( [[ ${CHOST} == *-cygwin* ]] && echo sys-libs/cygwin-crypt )"
 	)
 
 	# For grep we need to do a little workaround as we might use llvm-3.4
@@ -2298,7 +2313,6 @@ set_helper_vars() {
 	GENTOO_MIRRORS=${GENTOO_MIRRORS:="http://distfiles.gentoo.org"}
 	SNAPSHOT_HOST=$(rapx ${DISTFILES_G_O} http://rsync.prefix.bitzolder.nl)
 	SNAPSHOT_URL=${SNAPSHOT_URL:-"${SNAPSHOT_HOST}/snapshots"}
-	GCC_APPLE_URL="http://www.opensource.apple.com/darwinsource/tarballs/other"
 
 	export MAKE CONFIG_SHELL
 }
@@ -2810,7 +2824,8 @@ EOF
 
 	# Figure out if we are bootstrapping from an existing Gentoo
 	# It can be forced by setting HOST_GENTOO_EROOT manually
-	local t_GENTOO_EROOT=$(env -u EPREFIX portageq envvar EROOT 2> /dev/null)
+	local t_GENTOO_EROOT
+	t_GENTOO_EROOT=$(env -u EPREFIX portageq envvar EROOT 2> /dev/null)
 	if [[ ! -d ${HOST_GENTOO_EROOT} && -d ${t_GENTOO_EROOT} ]]; then
 		cat <<EOF
 
@@ -2911,10 +2926,11 @@ EOF
 			continue
 		fi
 		#readlink -f would not work on darwin, so use bash builtins
-		local realEPREFIX="$(cd "$EPREFIX"; pwd -P)"
-		if [[ -z ${I_KNOW_MY_GCC_WORKS_FINE_WITH_SYMLINKS} && ${EPREFIX} != ${realEPREFIX} ]]; then
+		local realEPREFIX
+		realEPREFIX="$(cd "${EPREFIX}" || exit 1; pwd -P)"
+		if [[ -z ${I_KNOW_MY_GCC_WORKS_FINE_WITH_SYMLINKS} && ${EPREFIX} != "${realEPREFIX}" ]]; then
 			echo
-			echo "$EPREFIX contains a symlink, which will make the merge of gcc"
+			echo "${EPREFIX} contains a symlink, which will make the merge of gcc"
 			echo "imposible, use '${realEPREFIX}' instead or"
 			echo "export I_KNOW_MY_GCC_WORKS_FINE_WITH_SYMLINKS='hell yeah'"
 			[[ ${TODO} == 'noninteractive' ]] && exit 1
@@ -3024,7 +3040,8 @@ EOF
 	# This happens at least on 32-bits Darwin, with i386 and i686.
 	# https://bugs.gentoo.org/show_bug.cgi?id=433948
 	unset CHOST
-	export CHOST=$(portageq envvar CHOST)
+	CHOST=$(portageq envvar CHOST)
+	export CHOST
 
 	# after stage1 and stage2 we should have a bash of our own, which
 	# is preferable over the host-provided one, because we know it can
@@ -3257,13 +3274,13 @@ fi
 case ${CHOST} in
 	*-*-solaris*)
 		if type -P gmake > /dev/null ; then
-			MAKE=gmake
+			MAKE="gmake"
 		else
-			MAKE=make
+			MAKE="make"
 		fi
 	;;
 	*)
-		MAKE=make
+		MAKE="make"
 	;;
 esac
 

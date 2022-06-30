@@ -21,3 +21,5 @@ jobs:
       uses: ludeeus/action-shellcheck@1.1.0
       with:
         scandir: "./scripts"
+      env:
+        SHELLCHECK_OPTS: -e SC2038
