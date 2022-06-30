@@ -13,10 +13,10 @@ if [ -z "$1" ] ; then
 	exit 255
 fi
 
-mkdir -p "$1"
-cd "$1"
+mkdir -p "${1}"
+cd "${1}" || exit 1
 mkdir bash-build
-cd bash-build
+cd bash-build || exit 1
 
 GENTOO_MIRRORS=${GENTOO_MIRRORS:="http://distfiles.gentoo.org/distfiles"}
 
@@ -77,7 +77,7 @@ fi
 
 gzip -d bash-4.2.tar.gz
 tar -xf bash-4.2.tar
-cd bash-4.2
+cd bash-4.2 || exit 1
 
 ./configure --prefix="${1}"/usr --disable-nls
 make
