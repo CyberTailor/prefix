@@ -172,8 +172,9 @@ configure_toolchain() {
 	# The bootstrap Python 3.7 we have in use requires C11, so Apple's
 	# 4.x line is no longer enough for that.
 
-	CC=gcc
-	CXX=g++
+	CC="gcc"
+	CPP="gcc -E"
+	CXX="g++"
 
 	case ${CHOST}:${DARWIN_USE_GCC} in
 		*darwin*:1)
@@ -229,8 +230,9 @@ configure_toolchain() {
 						sys-devel/llvm
 						sys-devel/clang
 					"
-					CC=clang
-					CXX=clang++
+					CC="clang"
+					CPP="clang-cpp"
+					CXX="clang++"
 					# avoid going through hoops and deps for
 					# binutils-apple, rely on the host-installed ld to
 					# build a compiler, we'll pull in binutils-apple
@@ -1477,7 +1479,7 @@ bootstrap_stage1() {
 	fi
 
 	configure_toolchain
-	export CC CXX
+	export CC CPP CXX
 
 	# Run all bootstrap_* commands in a subshell since the targets
 	# frequently pollute the environment using exports which affect
@@ -1775,7 +1777,7 @@ bootstrap_stage2() {
 	configure_toolchain || return 1
 	configure_cflags || return 1
 	export CONFIG_SHELL="${ROOT}"/tmp/bin/bash
-	export CC CXX
+	export CC CPP CXX
 
 	emerge_pkgs() {
 		EPREFIX="${ROOT}"/tmp \
